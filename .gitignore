@@ -74,3 +74,4 @@ wandb/
 tmp/
 temp/
 *.tmp
+.claude/
