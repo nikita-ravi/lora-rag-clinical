@@ -110,6 +110,12 @@ The cleanest test of the mechanistic claim is LoRA-B vs LoRA-A', where the only 
 ---
 
 ### M3: Retrieval Layer
+
+**Status:** ✅ Complete (2026-04-07). Hit@5 = 0.880 on BioASQ dev set, in band.
+Design pivoted from PubMedQA-primary to BioASQ-primary mid-milestone due to
+PubMedQA retrieval saturation. See data_audit.md "Retrieval Eval History"
+and preregistration.md "Design Change Log" for full chronology.
+
 **Estimated hours:** 10–12
 **Dependencies:** M2
 **Deliverables:**
@@ -444,8 +450,8 @@ These are uncertainties I cannot resolve through planning—they require empiric
 - [x] Q1–Q4 answered
 - [x] Additional directives incorporated
 - [x] M1 scaffold complete (2025-04-07)
-- [ ] M2 data layer
-- [ ] M3 retrieval layer
+- [x] M2 data layer complete (2026-04-07)
+- [x] M3 retrieval layer complete (2026-04-07) — Hit@5=0.880 in band, BioASQ pivot
 - [ ] M4 synthetic data generation
 - [ ] M5 prompts & distractors
 - [ ] M6 training scripts
@@ -455,4 +461,4 @@ These are uncertainties I cannot resolve through planning—they require empiric
 
 ---
 
-*Last updated: 2025-04-07*
+*Last updated: 2026-04-07*
