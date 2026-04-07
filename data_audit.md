@@ -4,7 +4,38 @@
 
 Generated at: 2026-04-07T07:45:44.275859+00:00
 
-## PubMedQA (Primary Evaluation)
+## BioASQ (Primary Evaluation)
+
+> **Design pivot (M3):** Promoted from training-only to primary evaluation dataset. PubMedQA retrieval saturated at R@5=0.980 due to structural bias (questions derived from abstract titles). BioASQ questions are expert-written with extractive gold snippets, providing naturally harder retrieval.
+
+- **Total examples:** 3059 (factoid + yesno only)
+- **Train:** 2459
+- **Dev:** 100
+- **Test:** 500
+- **Question type distribution (factoid/yesno):** {'factoid': 1600, 'yesno': 1459}
+- **Yes/No label distribution:** {'yes': 1069, 'no': 390}
+- **Supported retrieval conditions:** ['none', 'strong', 'oracle']
+
+### Split Stratification
+Test and dev sets are stratified by question type to maintain natural ratio (~52% factoid, ~48% yesno):
+- **Test:** 261 factoid, 239 yesno
+- **Dev:** 52 factoid, 48 yesno
+
+### Question Length (words)
+- Avg: 9.0
+
+### Snippet Length (words)
+- Avg: 29.4
+- Avg snippets per question: 12.6
+
+### Test Set Hash (SHA-256)
+```
+bf19d29ada7450b2e1057f678c51a2bf5db6b88db0d7ec88f1c3875ed3c84360
+```
+
+## PubMedQA (Secondary/Exploratory)
+
+> **Note:** Demoted from primary evaluation due to retrieval saturation. PubMedQA questions are paraphrased abstract titles, causing trivial title-to-abstract matching (R@5=0.980). Retained for exploratory analysis and backward compatibility.
 
 - **Total examples:** 1000
 - **Train:** 450
@@ -27,23 +58,6 @@ Generated at: 2026-04-07T07:45:44.275859+00:00
 ```
 6a5bd9fb2d5b771975391378ad65d7e8f8739427f1bb0ed3ed4759a04d905bef
 ```
-
-## BioASQ (Primary Training)
-
-- **Total examples:** 3059 (factoid + yesno only)
-- **Train:** 2447
-- **Dev:** 305
-- **Test:** 307
-- **Question type distribution (factoid/yesno):** {'factoid': 1600, 'yesno': 1459}
-- **Yes/No label distribution:** {'yes': 1069, 'no': 390}
-- **Supported retrieval conditions:** ['none', 'strong', 'oracle']
-
-### Question Length (words)
-- Avg: 9.0
-
-### Snippet Length (words)
-- Avg: 29.4
-- Avg snippets per question: 12.6
 
 ## MIRAGE (External Validation)
 
@@ -124,4 +138,12 @@ Built: 2026-04-07
 
 **Eval 2:** Corpus expanded with BioASQ Task 13B snippets (36,178 unique snippets from factoid + yesno questions). R@5 unchanged at 0.980. Some BioASQ snippets became competitive (e.g., gastric surgery snippet reached rank 2), but gold passages still dominated. MRR dropped slightly (0.937 → 0.916), indicating gold passages occasionally moved to rank 2-3 but stayed in top-5.
 
-**Conclusion:** PubMedQA's structural bias (question ≈ abstract title) makes "strong" retrieval indistinguishable from oracle. Design decision required.
+**Conclusion:** PubMedQA's structural bias (question ≈ abstract title) makes "strong" retrieval indistinguishable from oracle. **Design pivot:** BioASQ promoted to primary evaluation dataset.
+
+### BioASQ Retrieval Eval (pending)
+
+| Eval | Split | Examples | Recall@5 | MRR | nDCG@5 | Status |
+|------|-------|----------|----------|-----|--------|--------|
+| 3 | dev | 100 | — | — | — | Pending |
+
+**Hard exit criterion:** 0.70 < Recall@5 < 0.95

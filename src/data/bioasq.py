@@ -39,11 +39,13 @@ load_dotenv()
 # Question types we include (exclude list and summary)
 INCLUDED_TYPES = {"factoid", "yesno"}
 
-# Split ratios for BioASQ (we create our own splits)
-TRAIN_RATIO = 0.8
-DEV_RATIO = 0.1
-TEST_RATIO = 0.1
+# Split sizes for BioASQ (fixed, stratified)
+TEST_SIZE = 500
+DEV_SIZE = 100
 SPLIT_SEED = 42
+
+# Path to locked splits file
+SPLITS_FILE = Path(__file__).parent.parent.parent / "data" / "bioasq_splits.json"
 
 
 def load_bioasq(split: str = "train") -> list[dict[str, Any]]:
@@ -80,7 +82,21 @@ def load_bioasq(split: str = "train") -> list[dict[str, Any]]:
     if not data_dir.exists():
         raise FileNotFoundError(f"BioASQ data directory not found: {data_dir}")
 
-    # Load all JSON files from the directory
+    # Load all examples from JSON files
+    all_examples = _load_all_bioasq_examples(data_dir)
+
+    # Get or create locked splits
+    split_ids = _get_or_create_splits(all_examples)
+
+    # Create ID to example mapping
+    id_to_example = {ex["id"]: ex for ex in all_examples}
+
+    # Return requested split
+    return [id_to_example[qid] for qid in split_ids[f"{split}_ids"]]
+
+
+def _load_all_bioasq_examples(data_dir: Path) -> list[dict[str, Any]]:
+    """Load all BioASQ examples from directory."""
     all_examples = []
     json_files = list(data_dir.glob("*.json"))
 
@@ -100,28 +116,97 @@ def load_bioasq(split: str = "train") -> list[dict[str, Any]]:
             f"Found {len(all_examples)} total questions."
         )
 
-    # Sort by ID for deterministic ordering
+    # Sort by ID for deterministic ordering before any random operations
     filtered_examples.sort(key=lambda x: x["id"])
 
-    # Create deterministic splits
+    return filtered_examples
+
+
+def _get_or_create_splits(all_examples: list[dict]) -> dict[str, Any]:
+    """Get locked splits from file or create them if file doesn't exist.
+
+    Once splits are created and saved, they are immutable. This ensures
+    reproducibility across runs and machines.
+    """
+    if SPLITS_FILE.exists():
+        # Load existing splits
+        with open(SPLITS_FILE, "r") as f:
+            return json.load(f)
+
+    # Create new splits (stratified by question type)
+    splits = _create_stratified_splits(all_examples)
+
+    # Save to file (makes them immutable)
+    SPLITS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(SPLITS_FILE, "w") as f:
+        json.dump(splits, f, indent=2)
+
+    print(f"Created and locked BioASQ splits: {SPLITS_FILE}")
+    return splits
+
+
+def _create_stratified_splits(all_examples: list[dict]) -> dict[str, Any]:
+    """Create stratified train/dev/test splits.
+
+    Stratifies by question type (factoid vs yesno) to maintain
+    roughly the same ratio in each split.
+    """
+    # Separate by question type
+    factoid = [ex for ex in all_examples if ex["question_type"] == "factoid"]
+    yesno = [ex for ex in all_examples if ex["question_type"] == "yesno"]
+
+    # Calculate proportions
+    n_total = len(all_examples)
+    factoid_ratio = len(factoid) / n_total
+    yesno_ratio = len(yesno) / n_total
+
+    # Calculate stratified sizes for test set
+    n_test_factoid = int(TEST_SIZE * factoid_ratio)
+    n_test_yesno = TEST_SIZE - n_test_factoid  # Ensure exact total
+
+    # Calculate stratified sizes for dev set
+    n_dev_factoid = int(DEV_SIZE * factoid_ratio)
+    n_dev_yesno = DEV_SIZE - n_dev_factoid  # Ensure exact total
+
+    # Use deterministic RNG
     rng = random.Random(SPLIT_SEED)
-    indices = list(range(len(filtered_examples)))
-    rng.shuffle(indices)
 
-    n_total = len(filtered_examples)
-    n_train = int(n_total * TRAIN_RATIO)
-    n_dev = int(n_total * DEV_RATIO)
+    # Shuffle each type separately
+    factoid_shuffled = factoid.copy()
+    yesno_shuffled = yesno.copy()
+    rng.shuffle(factoid_shuffled)
+    rng.shuffle(yesno_shuffled)
 
-    train_indices = indices[:n_train]
-    dev_indices = indices[n_train:n_train + n_dev]
-    test_indices = indices[n_train + n_dev:]
+    # Split factoid questions
+    test_factoid = factoid_shuffled[:n_test_factoid]
+    dev_factoid = factoid_shuffled[n_test_factoid:n_test_factoid + n_dev_factoid]
+    train_factoid = factoid_shuffled[n_test_factoid + n_dev_factoid:]
 
-    if split == "train":
-        return [filtered_examples[i] for i in sorted(train_indices)]
-    elif split == "dev":
-        return [filtered_examples[i] for i in sorted(dev_indices)]
-    else:  # test
-        return [filtered_examples[i] for i in sorted(test_indices)]
+    # Split yesno questions
+    test_yesno = yesno_shuffled[:n_test_yesno]
+    dev_yesno = yesno_shuffled[n_test_yesno:n_test_yesno + n_dev_yesno]
+    train_yesno = yesno_shuffled[n_test_yesno + n_dev_yesno:]
+
+    # Combine and extract IDs
+    test_ids = sorted([ex["id"] for ex in test_factoid + test_yesno])
+    dev_ids = sorted([ex["id"] for ex in dev_factoid + dev_yesno])
+    train_ids = sorted([ex["id"] for ex in train_factoid + train_yesno])
+
+    return {
+        "seed": SPLIT_SEED,
+        "train_ids": train_ids,
+        "dev_ids": dev_ids,
+        "test_ids": test_ids,
+        "train_size": len(train_ids),
+        "dev_size": len(dev_ids),
+        "test_size": len(test_ids),
+        "stratification": {
+            "test_factoid": n_test_factoid,
+            "test_yesno": n_test_yesno,
+            "dev_factoid": n_dev_factoid,
+            "dev_yesno": n_dev_yesno,
+        }
+    }
 
 
 def _filter_question_types(examples: list[dict]) -> list[dict]:
@@ -305,6 +390,14 @@ def get_bioasq_stats() -> dict[str, Any]:
         for snip in ex["snippets"]:
             snippet_lengths.append(len(snip["text"].split()))
 
+    # Per-split type distribution
+    split_type_dist = {}
+    for split_name, split_data in [("train", train), ("dev", dev), ("test", test)]:
+        split_type_dist[split_name] = {
+            "factoid": sum(1 for ex in split_data if ex["question_type"] == "factoid"),
+            "yesno": sum(1 for ex in split_data if ex["question_type"] == "yesno"),
+        }
+
     return {
         "total": len(all_examples),
         "train": len(train),
@@ -316,4 +409,5 @@ def get_bioasq_stats() -> dict[str, Any]:
         "avg_question_length": sum(question_lengths) / len(question_lengths) if question_lengths else 0,
         "avg_snippet_length": sum(snippet_lengths) / len(snippet_lengths) if snippet_lengths else 0,
         "avg_snippets_per_question": sum(snippets_per_question) / len(snippets_per_question) if snippets_per_question else 0,
+        "split_type_distribution": split_type_dist,
     }

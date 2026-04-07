@@ -6,5 +6,9 @@
   "mirage": {
     "hash": "515931421bb81ea6c09ff35d15a3a1fbc60ce18b44b14e79d5b41b9ddc6ea14b",
     "size": 500
+  },
+  "bioasq": {
+    "hash": "bf19d29ada7450b2e1057f678c51a2bf5db6b88db0d7ec88f1c3875ed3c84360",
+    "size": 500
   }
 }

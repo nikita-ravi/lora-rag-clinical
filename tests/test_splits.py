@@ -124,7 +124,10 @@ class TestHashMechanism:
 
 
 class TestBioASQ:
-    """Tests for BioASQ data loading (requires BIOASQ_DATA_PATH)."""
+    """Tests for BioASQ data loading (requires BIOASQ_DATA_PATH).
+
+    BioASQ is the PRIMARY evaluation dataset (pivoted from PubMedQA in M3).
+    """
 
     @pytest.mark.skipif(
         not os.environ.get("BIOASQ_DATA_PATH"),
@@ -144,6 +147,93 @@ class TestBioASQ:
         """Verify BioASQ supports all three retrieval conditions."""
         conditions = get_supported_retrieval_conditions("bioasq")
         assert conditions == ["none", "strong", "oracle"]
+
+    @pytest.mark.skipif(
+        not os.environ.get("BIOASQ_DATA_PATH"),
+        reason="BioASQ requires BIOASQ_DATA_PATH environment variable"
+    )
+    def test_bioasq_split_sizes(self):
+        """Verify BioASQ split sizes match expected values."""
+        from src.data.bioasq import load_bioasq
+
+        train = load_bioasq("train")
+        dev = load_bioasq("dev")
+        test = load_bioasq("test")
+
+        # Fixed sizes from design pivot
+        assert len(test) == 500, f"Test should have 500 examples, got {len(test)}"
+        assert len(dev) == 100, f"Dev should have 100 examples, got {len(dev)}"
+        # Train is remainder: ~2459
+        assert 2400 <= len(train) <= 2500, f"Train should have ~2459 examples, got {len(train)}"
+
+    @pytest.mark.skipif(
+        not os.environ.get("BIOASQ_DATA_PATH"),
+        reason="BioASQ requires BIOASQ_DATA_PATH environment variable"
+    )
+    def test_bioasq_train_dev_test_no_overlap(self):
+        """Verify no question ID appears in more than one split."""
+        from src.data.bioasq import load_bioasq
+
+        train = load_bioasq("train")
+        dev = load_bioasq("dev")
+        test = load_bioasq("test")
+
+        train_ids = set(ex["id"] for ex in train)
+        dev_ids = set(ex["id"] for ex in dev)
+        test_ids = set(ex["id"] for ex in test)
+
+        assert len(train_ids & dev_ids) == 0, "Train and dev sets overlap"
+        assert len(train_ids & test_ids) == 0, "Train and test sets overlap"
+        assert len(dev_ids & test_ids) == 0, "Dev and test sets overlap"
+
+    @pytest.mark.skipif(
+        not os.environ.get("BIOASQ_DATA_PATH"),
+        reason="BioASQ requires BIOASQ_DATA_PATH environment variable"
+    )
+    def test_bioasq_test_set_hash_matches(self):
+        """Verify locked hash matches compute_test_hash(load_bioasq('test'))."""
+        from src.data.bioasq import load_bioasq
+        import json
+        from pathlib import Path
+
+        test = load_bioasq("test")
+        computed_hash = compute_test_hash(test)
+
+        # Load locked hash
+        hash_file = Path("data/test_set_hash.json")
+        with open(hash_file) as f:
+            hashes = json.load(f)
+
+        locked_hash = hashes["bioasq"]["hash"]
+
+        assert computed_hash == locked_hash, \
+            f"BioASQ test set hash mismatch: computed {computed_hash[:16]}... vs locked {locked_hash[:16]}..."
+
+    @pytest.mark.skipif(
+        not os.environ.get("BIOASQ_DATA_PATH"),
+        reason="BioASQ requires BIOASQ_DATA_PATH environment variable"
+    )
+    def test_bioasq_test_set_stratification(self):
+        """Verify test set has both factoid and yesno in roughly natural ratio.
+
+        Natural ratio is ~52% factoid, ~48% yesno. Allow ±10% tolerance.
+        """
+        from src.data.bioasq import load_bioasq
+
+        test = load_bioasq("test")
+
+        n_factoid = sum(1 for ex in test if ex["question_type"] == "factoid")
+        n_yesno = sum(1 for ex in test if ex["question_type"] == "yesno")
+
+        # Check both types are present
+        assert n_factoid > 0, "Test set should contain factoid questions"
+        assert n_yesno > 0, "Test set should contain yesno questions"
+
+        # Check ratio is within tolerance (natural is ~52% factoid)
+        # 500 * 0.52 = 260, ±10% means 234-286 factoid questions
+        factoid_ratio = n_factoid / len(test)
+        assert 0.42 <= factoid_ratio <= 0.62, \
+            f"Factoid ratio {factoid_ratio:.2f} outside expected range [0.42, 0.62]"
 
 
 class TestMIRAGE:
