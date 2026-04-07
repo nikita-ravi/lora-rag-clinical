@@ -77,3 +77,26 @@ Generated at: 2026-04-07T06:45:18.978919+00:00
 ## Test Set Verification
 
 Run `pytest tests/test_splits.py` to verify test set integrity and data loading.
+
+## Retrieval Index (M3)
+
+Built: 2026-04-07
+
+### Index Configuration
+- **Embedding model:** BAAI/bge-base-en-v1.5
+- **Reranker model:** BAAI/bge-reranker-base
+- **Index type:** FAISS IndexFlatIP (exact search)
+- **Retrieval pipeline:** Dense top-20 → Rerank to top-5
+
+### Index Statistics
+- **Passages indexed:** 1000 (PubMedQA abstracts only; BioASQ not loaded)
+- **Embedding dimension:** 768
+- **Build time:** 53.5 seconds
+- **Index file size:** 2.93 MB
+- **ID mapping size:** 27.18 KB
+- **Index path:** `data/indices/pubmedqa.faiss`
+
+### Notes
+- One passage per abstract (no chunking for v1)
+- BGE query instruction prefix applied to queries: `"Represent this sentence for searching relevant passages: "`
+- Index file not committed to git (too large); rebuild with `scripts/build_index.sh`

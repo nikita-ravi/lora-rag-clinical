@@ -75,3 +75,7 @@ tmp/
 temp/
 *.tmp
 .claude/
+
+# FAISS indices (too large to commit)
+data/indices/*.faiss
+data/indices/*.bin
