@@ -99,9 +99,11 @@ Built: 2026-04-07
 - **Retrieval pipeline:** Dense top-20 → Rerank to top-5
 
 ### Index Statistics
-- **Passages indexed:** [TO BE UPDATED after rebuild]
-- **Source distribution:** PubMedQA (1000) + BioASQ snippets (~36k)
+- **Passages indexed:** 37,178
+- **Source distribution:** PubMedQA (1,000) + BioASQ (36,178)
 - **Embedding dimension:** 768
+- **Index file size:** 108.92 MB
+- **Build time:** 6.8 minutes
 - **Index path:** `data/indices/pubmedqa.faiss`
 
 ### Notes
@@ -114,8 +116,12 @@ Built: 2026-04-07
 | Eval | Corpus | Passages | Recall@5 | MRR | nDCG@5 | Status |
 |------|--------|----------|----------|-----|--------|--------|
 | 1 | PubMedQA only | 1,000 | 0.980 | 0.937 | 0.948 | **Band violation** (>0.95) |
-| 2 | PubMedQA + BioASQ | ~37k | [pending] | [pending] | [pending] | [pending] |
+| 2 | PubMedQA + BioASQ | 37,178 | 0.980 | 0.916 | 0.932 | **Band violation** (>0.95) |
 
 **Hard exit criterion:** 0.70 < Recall@5 < 0.95
 
-Eval 1 violated the upper band (R@5 = 0.980). PubMedQA questions are derived from abstract titles, so dense retrieval trivially matches questions to their source abstracts. Corpus expanded with BioASQ snippets to increase difficulty.
+**Eval 1:** Band violation (R@5 = 0.980). PubMedQA questions are derived from abstract titles, so dense retrieval trivially matches questions to their source abstracts. Rank-1-to-rank-2 score gaps ranged from 0.68 to 0.99, indicating the retriever was confidently matching titles to abstracts.
+
+**Eval 2:** Corpus expanded with BioASQ Task 13B snippets (36,178 unique snippets from factoid + yesno questions). R@5 unchanged at 0.980. Some BioASQ snippets became competitive (e.g., gastric surgery snippet reached rank 2), but gold passages still dominated. MRR dropped slightly (0.937 → 0.916), indicating gold passages occasionally moved to rank 2-3 but stayed in top-5.
+
+**Conclusion:** PubMedQA's structural bias (question ≈ abstract title) makes "strong" retrieval indistinguishable from oracle. Design decision required.
