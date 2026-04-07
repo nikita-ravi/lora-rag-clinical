@@ -56,7 +56,8 @@ def evaluate_retrieval(
         retrieved_ids = [r["id"] for r in retrieved]
 
         # Compute metrics
-        recall = recall_at_k(retrieved_ids, gold_ids, k)
+        hit = compute_hit_at_k(retrieved_ids, gold_ids, k)
+        prop_recall = compute_proportional_recall_at_k(retrieved_ids, gold_ids, k)
         rr = mrr(retrieved_ids, gold_ids)
         ndcg = ndcg_at_k(retrieved_ids, gold_ids, k)
 
@@ -72,10 +73,13 @@ def evaluate_retrieval(
             "question": question,
             "gold_ids": gold_ids,
             "retrieved_ids": retrieved_ids,
-            "recall@k": recall,
+            "hit@k": hit,
+            "proportional_recall@k": prop_recall,
             "mrr": rr,
             "ndcg@k": ndcg,
             "answer": query_data.get("answer", ""),
+            "question_type": query_data.get("question_type", ""),
+            "n_gold": len(gold_ids),
             "gold_passage_length": avg_gold_length,
         })
 
@@ -88,20 +92,48 @@ def evaluate_retrieval(
     # Stratify by passage length (terciles)
     by_length = _stratify_by_passage_length(per_query_results)
 
+    # Stratify by question type (factoid/yesno for BioASQ)
+    by_question_type = _stratify_by_question_type(per_query_results)
+
+    # Stratify by number of gold snippets
+    by_n_gold = _stratify_by_n_gold(per_query_results)
+
     return {
         "overall": overall,
         "by_answer_label": by_answer,
         "by_passage_length": by_length,
+        "by_question_type": by_question_type,
+        "by_n_gold": by_n_gold,
         "raw_results": per_query_results,
     }
 
 
-def recall_at_k(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
-    """Compute Recall@k.
+def compute_hit_at_k(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
+    """Compute Hit@k (binary: any gold in top-k?).
 
-    Recall@k = |retrieved ∩ gold| / |gold|
+    Hit@k = 1.0 if at least one gold passage is in the top-k, 0.0 otherwise.
 
-    For single gold passage (most of PubMedQA), this is binary: 1 if found, 0 otherwise.
+    This is the metric for RAG usefulness: did retrieval return at least one
+    useful piece of evidence? The model only needs some relevant evidence to
+    reason from — it doesn't need to find every single gold snippet.
+    """
+    if not gold_ids:
+        return 0.0
+
+    gold_set = set(gold_ids)
+    retrieved_set = set(retrieved_ids[:k])
+
+    return 1.0 if gold_set & retrieved_set else 0.0
+
+
+def compute_proportional_recall_at_k(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
+    """Compute Proportional Recall@k.
+
+    Proportional Recall@k = |retrieved ∩ gold| / |gold|
+
+    For single gold passage, this equals Hit@k.
+    For multi-gold passages (BioASQ), this measures exhaustiveness.
+    Note: mathematically capped at k / |gold| when |gold| > k.
     """
     if not gold_ids:
         return 0.0
@@ -158,11 +190,18 @@ def ndcg_at_k(retrieved_ids: list[str], gold_ids: list[str], k: int) -> float:
 def _aggregate_metrics(results: list[dict]) -> dict[str, float]:
     """Aggregate per-query metrics."""
     if not results:
-        return {"recall@5": 0.0, "mrr": 0.0, "ndcg@5": 0.0, "n_queries": 0}
+        return {
+            "hit@5": 0.0,
+            "proportional_recall@5": 0.0,
+            "mrr": 0.0,
+            "ndcg@5": 0.0,
+            "n_queries": 0,
+        }
 
     n = len(results)
     return {
-        "recall@5": sum(r["recall@k"] for r in results) / n,
+        "hit@5": sum(r["hit@k"] for r in results) / n,
+        "proportional_recall@5": sum(r["proportional_recall@k"] for r in results) / n,
         "mrr": sum(r["mrr"] for r in results) / n,
         "ndcg@5": sum(r["ndcg@k"] for r in results) / n,
         "n_queries": n,
@@ -228,6 +267,56 @@ def _stratify_by_passage_length(results: list[dict]) -> dict[str, dict]:
     }
 
 
+def _stratify_by_question_type(results: list[dict]) -> dict[str, dict]:
+    """Stratify results by question type (factoid/yesno for BioASQ)."""
+    by_type = {}
+
+    for result in results:
+        qtype = result.get("question_type", "unknown")
+        if not qtype:
+            qtype = "unknown"
+        if qtype not in by_type:
+            by_type[qtype] = []
+        by_type[qtype].append(result)
+
+    return {
+        qtype: _aggregate_metrics(type_results)
+        for qtype, type_results in by_type.items()
+    }
+
+
+def _stratify_by_n_gold(results: list[dict]) -> dict[str, dict]:
+    """Stratify results by number of gold snippets (low/medium/high)."""
+    if not results:
+        return {"low": {}, "medium": {}, "high": {}}
+
+    # low: 1-5, medium: 6-10, high: 11+
+    low = [r for r in results if r.get("n_gold", 0) <= 5]
+    medium = [r for r in results if 6 <= r.get("n_gold", 0) <= 10]
+    high = [r for r in results if r.get("n_gold", 0) >= 11]
+
+    def get_n_gold_range(subset):
+        if not subset:
+            return (0, 0)
+        n_golds = [r.get("n_gold", 0) for r in subset]
+        return (min(n_golds), max(n_golds))
+
+    return {
+        "low (1-5)": {
+            **_aggregate_metrics(low),
+            "n_gold_range": get_n_gold_range(low),
+        },
+        "medium (6-10)": {
+            **_aggregate_metrics(medium),
+            "n_gold_range": get_n_gold_range(medium),
+        },
+        "high (11+)": {
+            **_aggregate_metrics(high),
+            "n_gold_range": get_n_gold_range(high),
+        },
+    }
+
+
 def format_retrieval_metrics(metrics: dict[str, Any]) -> str:
     """Format retrieval metrics for display."""
     lines = []
@@ -235,7 +324,8 @@ def format_retrieval_metrics(metrics: dict[str, Any]) -> str:
     # Overall
     overall = metrics["overall"]
     lines.append("=== Overall Retrieval Metrics ===")
-    lines.append(f"Recall@5: {overall['recall@5']:.3f}")
+    lines.append(f"Hit@5: {overall['hit@5']:.3f}  (band-check metric)")
+    lines.append(f"Proportional Recall@5: {overall['proportional_recall@5']:.3f}")
     lines.append(f"MRR: {overall['mrr']:.3f}")
     lines.append(f"nDCG@5: {overall['ndcg@5']:.3f}")
     lines.append(f"N queries: {overall['n_queries']}")
@@ -245,7 +335,10 @@ def format_retrieval_metrics(metrics: dict[str, Any]) -> str:
     lines.append("=== By Answer Label ===")
     for label, stats in metrics["by_answer_label"].items():
         if stats.get("n_queries", 0) > 0:
-            lines.append(f"{label}: R@5={stats['recall@5']:.3f}, MRR={stats['mrr']:.3f}, n={stats['n_queries']}")
+            lines.append(
+                f"{label}: Hit@5={stats['hit@5']:.3f}, PropR@5={stats['proportional_recall@5']:.3f}, "
+                f"MRR={stats['mrr']:.3f}, n={stats['n_queries']}"
+            )
     lines.append("")
 
     # By passage length
@@ -256,7 +349,32 @@ def format_retrieval_metrics(metrics: dict[str, Any]) -> str:
             length_range = stats.get("length_range", (0, 0))
             lines.append(
                 f"{length_cat} ({length_range[0]:.0f}-{length_range[1]:.0f} words): "
-                f"R@5={stats['recall@5']:.3f}, MRR={stats['mrr']:.3f}, n={stats['n_queries']}"
+                f"Hit@5={stats['hit@5']:.3f}, PropR@5={stats['proportional_recall@5']:.3f}, "
+                f"MRR={stats['mrr']:.3f}, n={stats['n_queries']}"
             )
+    lines.append("")
+
+    # By question type (for BioASQ)
+    if "by_question_type" in metrics:
+        lines.append("=== By Question Type ===")
+        for qtype in ["factoid", "yesno"]:
+            stats = metrics["by_question_type"].get(qtype, {})
+            if stats.get("n_queries", 0) > 0:
+                lines.append(
+                    f"{qtype}: Hit@5={stats['hit@5']:.3f}, PropR@5={stats['proportional_recall@5']:.3f}, "
+                    f"MRR={stats['mrr']:.3f}, n={stats['n_queries']}"
+                )
+        lines.append("")
+
+    # By number of gold snippets
+    if "by_n_gold" in metrics:
+        lines.append("=== By Number of Gold Snippets ===")
+        for n_gold_cat in ["low (1-5)", "medium (6-10)", "high (11+)"]:
+            stats = metrics["by_n_gold"].get(n_gold_cat, {})
+            if stats.get("n_queries", 0) > 0:
+                lines.append(
+                    f"{n_gold_cat}: Hit@5={stats['hit@5']:.3f}, PropR@5={stats['proportional_recall@5']:.3f}, "
+                    f"MRR={stats['mrr']:.3f}, n={stats['n_queries']}"
+                )
 
     return "\n".join(lines)

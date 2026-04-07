@@ -22,7 +22,8 @@ from src.retrieval.retrieve import (
 )
 from src.retrieval.oracle import oracle_retrieve, none_retrieve
 from src.retrieval.eval_retrieval import (
-    recall_at_k,
+    compute_hit_at_k,
+    compute_proportional_recall_at_k,
     mrr,
     ndcg_at_k,
     evaluate_retrieval,
@@ -301,14 +302,14 @@ class TestOracleDeduplication:
         assert results[0]["is_gold"] is True
 
 
-# --- Test 6: Recall@5 metric ---
+# --- Test 6: Proportional Recall@5 metric (renamed from recall_at_k) ---
 
-class TestRecallMetric:
-    """Test Recall@k metric computation."""
+class TestProportionalRecallMetric:
+    """Test Proportional Recall@k metric computation."""
 
-    def test_recall_at_k_synthetic(self):
-        """Recall@5 on synthetic case: 7/10 = 0.7."""
-        # 10 queries, 7 have gold in top-5
+    def test_proportional_recall_at_k_single_gold(self):
+        """Proportional Recall@5 with single gold per query (equals Hit@5)."""
+        # 10 queries with single gold, 7 have gold in top-5
         test_cases = [
             (["p0", "p1", "p2", "p3", "p4"], ["p0"], 1.0),  # Hit
             (["p1", "p2", "p3", "p4", "p5"], ["p0"], 0.0),  # Miss
@@ -322,11 +323,88 @@ class TestRecallMetric:
             (["p0", "p1", "p2", "p3", "p4"], ["p0"], 1.0),  # Hit
         ]
 
-        recalls = [recall_at_k(retrieved, gold, 5) for retrieved, gold, _ in test_cases]
+        recalls = [compute_proportional_recall_at_k(retrieved, gold, 5) for retrieved, gold, _ in test_cases]
         avg_recall = sum(recalls) / len(recalls)
 
         # 7 hits out of 10 = 0.7
         assert avg_recall == 0.7
+
+
+# --- Test 6b: Hit@5 metric (binary: any gold in top-k?) ---
+
+class TestHitMetric:
+    """Test Hit@k metric computation with multi-gold scenarios."""
+
+    def test_hit_at_k_multi_gold_synthetic(self):
+        """Hit@5 on synthetic case with varying numbers of gold passages.
+
+        5 queries with multiple golds (counts: 3, 8, 12, 5, 1).
+        Hand-constructed to test both Hit@5 and Proportional Recall@5.
+        """
+        # Query 1: 3 gold passages, 2 in top-5 -> Hit=1.0, PropR=2/3=0.667
+        q1_retrieved = ["g1", "g2", "x1", "x2", "x3"]
+        q1_gold = ["g1", "g2", "g3"]
+        assert compute_hit_at_k(q1_retrieved, q1_gold, 5) == 1.0
+        assert abs(compute_proportional_recall_at_k(q1_retrieved, q1_gold, 5) - 2/3) < 1e-6
+
+        # Query 2: 8 gold passages, 4 in top-5 -> Hit=1.0, PropR=4/8=0.5
+        q2_retrieved = ["g1", "g2", "g3", "g4", "x1"]
+        q2_gold = ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8"]
+        assert compute_hit_at_k(q2_retrieved, q2_gold, 5) == 1.0
+        assert abs(compute_proportional_recall_at_k(q2_retrieved, q2_gold, 5) - 4/8) < 1e-6
+
+        # Query 3: 12 gold passages, 0 in top-5 -> Hit=0.0, PropR=0/12=0.0
+        q3_retrieved = ["x1", "x2", "x3", "x4", "x5"]
+        q3_gold = ["g1", "g2", "g3", "g4", "g5", "g6", "g7", "g8", "g9", "g10", "g11", "g12"]
+        assert compute_hit_at_k(q3_retrieved, q3_gold, 5) == 0.0
+        assert compute_proportional_recall_at_k(q3_retrieved, q3_gold, 5) == 0.0
+
+        # Query 4: 5 gold passages, 5 in top-5 -> Hit=1.0, PropR=5/5=1.0
+        q4_retrieved = ["g1", "g2", "g3", "g4", "g5"]
+        q4_gold = ["g1", "g2", "g3", "g4", "g5"]
+        assert compute_hit_at_k(q4_retrieved, q4_gold, 5) == 1.0
+        assert compute_proportional_recall_at_k(q4_retrieved, q4_gold, 5) == 1.0
+
+        # Query 5: 1 gold passage, 1 in top-5 -> Hit=1.0, PropR=1/1=1.0
+        q5_retrieved = ["x1", "x2", "g1", "x3", "x4"]
+        q5_gold = ["g1"]
+        assert compute_hit_at_k(q5_retrieved, q5_gold, 5) == 1.0
+        assert compute_proportional_recall_at_k(q5_retrieved, q5_gold, 5) == 1.0
+
+        # Aggregate: Hit@5 = (1+1+0+1+1)/5 = 0.8
+        all_hits = [
+            compute_hit_at_k(q1_retrieved, q1_gold, 5),
+            compute_hit_at_k(q2_retrieved, q2_gold, 5),
+            compute_hit_at_k(q3_retrieved, q3_gold, 5),
+            compute_hit_at_k(q4_retrieved, q4_gold, 5),
+            compute_hit_at_k(q5_retrieved, q5_gold, 5),
+        ]
+        assert sum(all_hits) / len(all_hits) == 0.8
+
+        # Aggregate PropR@5 = (2/3 + 4/8 + 0 + 1 + 1)/5 = (0.667 + 0.5 + 0 + 1 + 1)/5 ≈ 0.633
+        all_prop_recalls = [
+            compute_proportional_recall_at_k(q1_retrieved, q1_gold, 5),
+            compute_proportional_recall_at_k(q2_retrieved, q2_gold, 5),
+            compute_proportional_recall_at_k(q3_retrieved, q3_gold, 5),
+            compute_proportional_recall_at_k(q4_retrieved, q4_gold, 5),
+            compute_proportional_recall_at_k(q5_retrieved, q5_gold, 5),
+        ]
+        expected_prop_recall = (2/3 + 4/8 + 0 + 1 + 1) / 5
+        assert abs(sum(all_prop_recalls) / len(all_prop_recalls) - expected_prop_recall) < 1e-6
+
+    def test_hit_at_k_edge_cases(self):
+        """Test Hit@k edge cases."""
+        # Empty gold list -> 0.0
+        assert compute_hit_at_k(["p0", "p1"], [], 5) == 0.0
+
+        # Empty retrieved list -> 0.0
+        assert compute_hit_at_k([], ["g1"], 5) == 0.0
+
+        # Gold at position exactly k -> included
+        assert compute_hit_at_k(["x1", "x2", "x3", "x4", "g1"], ["g1"], 5) == 1.0
+
+        # Gold at position k+1 -> not included
+        assert compute_hit_at_k(["x1", "x2", "x3", "x4", "x5", "g1"], ["g1"], 5) == 0.0
 
 
 # --- Test 7: MRR metric ---
@@ -407,7 +485,8 @@ class TestStratifiedEval:
 
         # Check overall metrics exist
         assert "overall" in results
-        assert "recall@5" in results["overall"]
+        assert "hit@5" in results["overall"]
+        assert "proportional_recall@5" in results["overall"]
         assert "mrr" in results["overall"]
         assert "ndcg@5" in results["overall"]
         assert "n_queries" in results["overall"]
@@ -422,6 +501,12 @@ class TestStratifiedEval:
         assert "short" in results["by_passage_length"]
         assert "medium" in results["by_passage_length"]
         assert "long" in results["by_passage_length"]
+
+        # Check stratification by question type exists
+        assert "by_question_type" in results
+
+        # Check stratification by n_gold exists
+        assert "by_n_gold" in results
 
 
 # --- Test 10: BGE query prefix is present ---
