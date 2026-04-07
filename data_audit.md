@@ -2,7 +2,7 @@
 
 > Auto-generated. Do not edit by hand.
 
-Generated at: 2026-04-07T06:45:18.978919+00:00
+Generated at: 2026-04-07T07:45:44.275859+00:00
 
 ## PubMedQA (Primary Evaluation)
 
@@ -30,10 +30,20 @@ Generated at: 2026-04-07T06:45:18.978919+00:00
 
 ## BioASQ (Primary Training)
 
-- **Status:** Not loaded (BIOASQ_DATA_PATH environment variable not set. Set it to the directory containing BioASQ JSON files.)
-- Set BIOASQ_DATA_PATH environment variable to load BioASQ data
+- **Total examples:** 3059 (factoid + yesno only)
+- **Train:** 2447
+- **Dev:** 305
+- **Test:** 307
+- **Question type distribution (factoid/yesno):** {'factoid': 1600, 'yesno': 1459}
+- **Yes/No label distribution:** {'yes': 1069, 'no': 390}
 - **Supported retrieval conditions:** ['none', 'strong', 'oracle']
-- **Test Set Hash:** PENDING (will be computed when BioASQ data is loaded)
+
+### Question Length (words)
+- Avg: 9.0
+
+### Snippet Length (words)
+- Avg: 29.4
+- Avg snippets per question: 12.6
 
 ## MIRAGE (External Validation)
 
@@ -89,14 +99,23 @@ Built: 2026-04-07
 - **Retrieval pipeline:** Dense top-20 → Rerank to top-5
 
 ### Index Statistics
-- **Passages indexed:** 1000 (PubMedQA abstracts only; BioASQ not loaded)
+- **Passages indexed:** [TO BE UPDATED after rebuild]
+- **Source distribution:** PubMedQA (1000) + BioASQ snippets (~36k)
 - **Embedding dimension:** 768
-- **Build time:** 53.5 seconds
-- **Index file size:** 2.93 MB
-- **ID mapping size:** 27.18 KB
 - **Index path:** `data/indices/pubmedqa.faiss`
 
 ### Notes
-- One passage per abstract (no chunking for v1)
+- One passage per abstract (PubMedQA) or snippet (BioASQ), no chunking for v1
 - BGE query instruction prefix applied to queries: `"Represent this sentence for searching relevant passages: "`
 - Index file not committed to git (too large); rebuild with `scripts/build_index.sh`
+
+## Retrieval Eval History
+
+| Eval | Corpus | Passages | Recall@5 | MRR | nDCG@5 | Status |
+|------|--------|----------|----------|-----|--------|--------|
+| 1 | PubMedQA only | 1,000 | 0.980 | 0.937 | 0.948 | **Band violation** (>0.95) |
+| 2 | PubMedQA + BioASQ | ~37k | [pending] | [pending] | [pending] | [pending] |
+
+**Hard exit criterion:** 0.70 < Recall@5 < 0.95
+
+Eval 1 violated the upper band (R@5 = 0.980). PubMedQA questions are derived from abstract titles, so dense retrieval trivially matches questions to their source abstracts. Corpus expanded with BioASQ snippets to increase difficulty.

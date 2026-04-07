@@ -1,5 +1,6 @@
 """Tests for dataset splits and test set verification."""
 
+import os
 import pytest
 
 from src.data.pubmedqa import load_pubmedqa
@@ -126,7 +127,7 @@ class TestBioASQ:
     """Tests for BioASQ data loading (requires BIOASQ_DATA_PATH)."""
 
     @pytest.mark.skipif(
-        True,  # Will be replaced with actual env check
+        not os.environ.get("BIOASQ_DATA_PATH"),
         reason="BioASQ requires BIOASQ_DATA_PATH environment variable"
     )
     def test_bioasq_filters_list_questions(self):
