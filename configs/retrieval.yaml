@@ -1,0 +1,51 @@
+# Retrieval configuration
+
+# Embedding model for dense retrieval
+embedding:
+  model: "BAAI/bge-base-en-v1.5"
+  batch_size: 32
+  normalize: true
+  max_length: 512
+
+# Reranker (cross-encoder)
+reranker:
+  model: "BAAI/bge-reranker-base"
+  batch_size: 16
+  max_length: 512
+
+# Retrieval parameters
+retrieval:
+  # Retrieve more, then rerank to top-k
+  initial_k: 20
+  final_k: 5
+
+  # Retrieval conditions
+  conditions:
+    none:
+      # No retrieval - closed book
+      enabled: false
+    strong:
+      # Dense + rerank
+      enabled: true
+      use_reranker: true
+    oracle:
+      # Gold passage + padding from strong retrieval
+      enabled: true
+      include_gold: true
+      pad_with_retrieval: true
+
+# Index settings
+index:
+  type: "faiss"
+  index_factory: "Flat"  # Exact search for small corpus
+  # Use IVF for larger corpora: "IVF1024,Flat"
+
+# Evaluation metrics
+eval:
+  metrics:
+    - "recall@5"
+    - "mrr"
+    - "ndcg@5"
+  stratify_by:
+    - "question_type"
+    - "passage_length"  # terciles: short/medium/long

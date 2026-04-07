@@ -1,0 +1,62 @@
+# LoRA-A' configuration: Q + passages → A (passages as noise)
+# This is the control condition - same input as LoRA-B but without reasoning targets
+# Used to isolate "trained to reason over passages" as the variable
+
+# Inherit base config
+_base_: "base.yaml"
+
+# Recipe identifier
+recipe: "lora_a_prime"
+description: "Passages-as-noise fine-tuning (Q + passages → A, no reasoning)"
+
+# LoRA configuration (same as LoRA-A)
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# Training configuration (same as LoRA-A)
+training:
+  num_epochs: 1
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.03
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  optim: "adamw_8bit"
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  bf16: true
+  fp16: false
+  save_steps: 200
+  save_total_limit: 3
+  logging_steps: 10
+  report_to: "wandb"
+
+# Input format - KEY DIFFERENCE from LoRA-A
+input:
+  include_passages: true  # Same passages as LoRA-B
+  num_passages: 5
+  # Distractor sampling (same as LoRA-B for clean ablation):
+  # - 80% prob: gold passage + 4 random distractors
+  # - 20% prob: 5 random distractors (no gold)
+  gold_passage_prob: 0.8
+
+  # Target: "Answer: [label]" (NO reasoning, unlike LoRA-B)
+  # The only difference between LoRA-A' and LoRA-B is the target format
+
+# Seeds (same as other recipes)
+seeds:
+  - 42
+  - 123
+  - 456

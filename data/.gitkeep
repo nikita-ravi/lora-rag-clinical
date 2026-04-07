@@ -1,0 +1,3 @@
+# Data directory
+# BioASQ data should NOT be committed (redistribution restrictions)
+# Only synthetic data metadata and test set hashes are committed

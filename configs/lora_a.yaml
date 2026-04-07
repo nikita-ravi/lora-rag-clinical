@@ -1,0 +1,66 @@
+# LoRA-A configuration: Q → A (question only, no passages)
+# This is the "realistic baseline" that many teams use
+
+# Inherit base config
+_base_: "base.yaml"
+
+# Recipe identifier
+recipe: "lora_a"
+description: "Question-only fine-tuning (Q → A)"
+
+# LoRA configuration
+lora:
+  r: 16              # Rank
+  lora_alpha: 32     # Alpha (scaling factor)
+  lora_dropout: 0.05
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# Training configuration
+training:
+  num_epochs: 1
+  learning_rate: 2.0e-4
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.03
+
+  # Batch settings for T4 memory constraints
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  # Effective batch size: 1 * 16 = 16
+
+  # Optimization
+  optim: "adamw_8bit"
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+
+  # Mixed precision
+  bf16: true
+  fp16: false
+
+  # Checkpointing
+  save_steps: 200
+  save_total_limit: 3
+
+  # Logging
+  logging_steps: 10
+  report_to: "wandb"
+
+# Input format
+input:
+  include_passages: false
+  # Template: just the question
+  # Target: "Answer: [label]"
+
+# Seeds for reproducibility (3 runs)
+seeds:
+  - 42
+  - 123
+  - 456
