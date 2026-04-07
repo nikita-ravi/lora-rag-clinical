@@ -14,6 +14,10 @@ from src.retrieval.index import DEFAULT_EMBEDDING_MODEL
 # Default reranker model
 DEFAULT_RERANKER_MODEL = "BAAI/bge-reranker-base"
 
+# BGE query instruction prefix (required for asymmetric retrieval)
+# Passages are encoded raw; queries need this prefix per BGE model card
+BGE_QUERY_INSTRUCTION = "Represent this sentence for searching relevant passages: "
+
 # Cache for models (avoid reloading)
 _embedding_model = None
 _reranker_model = None
@@ -65,9 +69,11 @@ def retrieve(
     # Get embedding model
     model = get_embedding_model(model_name)
 
-    # Embed query
+    # Embed query with BGE instruction prefix (asymmetric encoding)
+    # Note: only queries get the prefix, not passages (indexed raw)
+    prefixed_query = BGE_QUERY_INSTRUCTION + query
     query_embedding = model.encode(
-        [query],
+        [prefixed_query],
         normalize_embeddings=True,
         convert_to_numpy=True,
     )
