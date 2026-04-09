@@ -170,6 +170,18 @@ If strong retrieval is too weak or too strong, we adjust the pipeline before pro
 - Generation pipeline documented transparently for paper
 - Cache committed (or gitignored with hash of contents committed)
 
+**M4 Budget Tracking:**
+
+| Phase | Budget | Actual / Projected | Notes |
+|-------|--------|---------------------|-------|
+| Original estimate | $4-5 | — | Set in M4 planning, before per-generation cost was known |
+| Hard cap (initial) | $5.00 | — | Set conservatively pre-pilot |
+| Pilot calibration 1 (max_tokens=400, full prompt) | — | $6.64 projected | Over cap, triggered prompt optimization |
+| Pilot calibration 2 (max_tokens=250, trimmed prompt) | — | $5.89 projected | 11% reduction, accepted as final |
+| Pilot 50-example actual | — | $0.0624 actual | $0.00125 avg per generation, 50 examples |
+| M4b revised projection | — | $6.24 projected | Based on pilot per-generation cost, replaces $5.89 calibration projection |
+| **Revised M4 budget** | **$6.50** | **~$6.24 projected** | Accepted because $15 console balance provides headroom; cost is well-understood and bounded |
+
 ---
 
 ### M5: Prompt Templates & Distractor Sampling
@@ -452,7 +464,7 @@ These are uncertainties I cannot resolve through planning—they require empiric
 - [x] M1 scaffold complete (2025-04-07)
 - [x] M2 data layer complete (2026-04-07)
 - [x] M3 retrieval layer complete (2026-04-07) — Hit@5=0.880 in band, BioASQ pivot
-- [ ] M4 synthetic data generation
+- [x] M4 synthetic data generation (2026-04-08) — 1877 examples, 93.8% pass rate, $2.50 cost
 - [ ] M5 prompts & distractors
 - [ ] M6 training scripts
 - [ ] M7 inference & eval
@@ -461,4 +473,4 @@ These are uncertainties I cannot resolve through planning—they require empiric
 
 ---
 
-*Last updated: 2026-04-07*
+*Last updated: 2026-04-08*
