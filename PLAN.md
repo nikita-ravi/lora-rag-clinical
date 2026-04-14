@@ -277,6 +277,8 @@ This is cheap insurance — fix issues before burning a full 4-hour run.
 **Pre-registered tests (SECONDARY on MIRAGE):**
 5. External validity: none-vs-strong contrast for LoRA-B vs base, LoRA-B vs LoRA-A, LoRA-B vs LoRA-A' across three held-out distributions (MMLU-Med, MedQA-US, MedMCQA)
 
+**Insufficient evidence handling (added 2026-04-13 during M5 design):** LoRA-B's synthetic training data includes 373/1877 (19.9%) examples with "Insufficient evidence" as the target answer. PubMedQA's native label space is yes/no/maybe only. M7 will parse LoRA-B outputs and report two metrics: (1) a 3-way accuracy with "Insufficient evidence" mapped to "maybe" for direct comparison against PubMedQA's standard metric and prior RAFT-style work, and (2) a 4-way accuracy treating "Insufficient evidence" as a distinct label for faithfulness analysis. Rationale: filtering these examples from training would discard correct calibrated-uncertainty behavior surfaced during M4 spot-checks, but preserving them creates an output-space mismatch that dual reporting resolves cleanly. Decision locked during M5; implementation deferred to M7.
+
 **Note:** MIRAGE oracle retrieval is not reported because MMLU-Med, MedQA-US, and MedMCQA do not provide gold supporting passages. The full retrieval-quality interaction is characterized on PubMedQA, where gold abstracts are available, while MIRAGE provides external validity for the none-vs-strong contrast across three held-out distributions.
 
 **Power simulation:** Before running the real interaction test, verify the test has adequate power. If 3 seeds is too few to detect a 5-point effect at p<0.05, we know before spending compute and can budget for 5 seeds instead.
