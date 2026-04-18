@@ -185,6 +185,9 @@ If strong retrieval is too weak or too strong, we adjust the pipeline before pro
 ---
 
 ### M5: Prompt Templates & Distractor Sampling
+
+**Status:** ✅ Complete (2026-04-14). M4's per-example passage sampling was reused rather than re-sampled (91/9 easy/hard split accepted; see M5 investigation commit 1cd26ef). Distractor sampling logic in distractors.py exists but is not called at materialization time — passages are read directly from M4's lora_b_train.jsonl. Clean ablation between LoRA-A' and LoRA-B verified: prompts are byte-identical, only targets differ.
+
 **Estimated hours:** 4–5
 **Dependencies:** M2, M3
 **Deliverables:**
@@ -467,7 +470,7 @@ These are uncertainties I cannot resolve through planning—they require empiric
 - [x] M2 data layer complete (2026-04-07)
 - [x] M3 retrieval layer complete (2026-04-07) — Hit@5=0.880 in band, BioASQ pivot
 - [x] M4 synthetic data generation (2026-04-08) — 1877 examples, 93.8% pass rate, $2.50 cost
-- [ ] M5 prompts & distractors
+- [x] M5 prompts & distractors (2026-04-14) — 1877 examples materialized, 3 training sets, clean ablation verified
 - [ ] M6 training scripts
 - [ ] M7 inference & eval
 - [ ] M8 annotation tool
@@ -475,4 +478,4 @@ These are uncertainties I cannot resolve through planning—they require empiric
 
 ---
 
-*Last updated: 2026-04-08*
+*Last updated: 2026-04-14*

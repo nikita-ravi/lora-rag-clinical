@@ -1,109 +1,137 @@
-"""Prompt templates for all LoRA recipes and inference.
+"""Prompt templates for LoRA-A, LoRA-A', and LoRA-B training.
 
-All prompt templates are defined here in one file for easy auditing.
+All three templates use the Llama 3.1 Instruct chat template format.
+LoRA-A' and LoRA-B share the same input format (question + passages);
+only the target differs. This enforces the clean ablation specified in PLAN.md M5.
+
+Citation format in LoRA-B targets is normalized to [P1]-[P5] brackets.
 """
 
-# System prompts
-SYSTEM_PROMPT = """You are a medical expert assistant. Answer questions accurately based on the provided evidence. Be concise and precise."""
+import re
 
-# LoRA-A: Question only → Answer
-LORA_A_TEMPLATE = """Question: {question}
+# Llama 3.1 Instruct chat template markers
+BOS = "<|begin_of_text|>"
+SYS_START = "<|start_header_id|>system<|end_header_id|>\n\n"
+SYS_END = "<|eot_id|>"
+USER_START = "<|start_header_id|>user<|end_header_id|>\n\n"
+USER_END = "<|eot_id|>"
+ASSISTANT_START = "<|start_header_id|>assistant<|end_header_id|>\n\n"
+ASSISTANT_END = "<|eot_id|>"
 
-Answer:"""
+# System instructions for each training condition
+INSTRUCTION_LORA_A = (
+    "You are a biomedical question answering system. "
+    "Answer the following question based on your knowledge."
+)
 
-LORA_A_TARGET_TEMPLATE = """Answer: {answer}"""
+INSTRUCTION_LORA_B = (
+    "You are a biomedical question answering system. "
+    "Answer the following question based on the provided passages. "
+    "Show your reasoning step by step, citing specific passages by their marker (e.g., [P1], [P3]). "
+    "If the passages do not contain enough information to answer, respond with 'Insufficient evidence'."
+)
 
-# LoRA-A': Question + passages → Answer (passages as noise)
-LORA_A_PRIME_TEMPLATE = """Question: {question}
-
-Evidence:
-{passages}
-
-Answer:"""
-
-LORA_A_PRIME_TARGET_TEMPLATE = """Answer: {answer}"""
-
-# LoRA-B: Question + passages → Reasoned answer with citations
-LORA_B_TEMPLATE = """Question: {question}
-
-Evidence:
-{passages}
-
-Based on the provided evidence, reason through the question and provide your answer."""
-
-LORA_B_TARGET_TEMPLATE = """Based on the provided evidence, {reasoning}
-
-Answer: {answer}"""
-
-# Inference templates (used at test time)
-INFERENCE_NO_RETRIEVAL_TEMPLATE = """Question: {question}
-
-Answer the question based on your knowledge."""
-
-INFERENCE_WITH_RETRIEVAL_TEMPLATE = """Question: {question}
-
-Evidence:
-{passages}
-
-Based on the provided evidence, answer the question."""
+# LoRA-A' uses the same instruction as LoRA-B for clean ablation:
+# both are asked to reason over passages, but A' is trained to output only the answer.
+INSTRUCTION_LORA_A_PRIME = INSTRUCTION_LORA_B
 
 
-def format_passages(passages: list[dict], include_index: bool = True) -> str:
-    """Format passages for inclusion in prompt.
+def _normalize_citations(text: str) -> str:
+    """Normalize citation markers in reasoning to bracketed [P1]-[P5] form.
 
-    Args:
-        passages: List of passage dicts with "text" key
-        include_index: Whether to include [1], [2], etc. indices
-
-    Returns:
-        Formatted string with passages
+    Handles:
+    - Already-bracketed [P1] through [P5] (leave as-is)
+    - Bare P1 through P5 with word boundaries → [P1] through [P5]
+    - Does not touch P6+ or non-passage P-prefixed tokens (genes, phases, etc.)
     """
-    raise NotImplementedError("TODO: Implement in M5")
+    # Match bare P1-P5 with word boundaries, preceded by whitespace or start-of-string,
+    # followed by punctuation, whitespace, or end-of-string
+    # Negative lookbehind to avoid matching already-bracketed forms
+    pattern = r'(?<!\[)\bP([1-5])\b(?!\])'
+    return re.sub(pattern, r'[P\1]', text)
 
 
-def format_lora_a_input(question: str) -> str:
-    """Format input for LoRA-A training (Q only)."""
-    raise NotImplementedError("TODO: Implement in M5")
+def _format_passages(passages: list[dict]) -> str:
+    """Format 5 passages into the user prompt passage block.
 
+    Passages are sorted by position (1-5) so the order is deterministic.
+    Output format:
 
-def format_lora_a_target(answer: str) -> str:
-    """Format target for LoRA-A training."""
-    raise NotImplementedError("TODO: Implement in M5")
-
-
-def format_lora_a_prime_input(question: str, passages: list[dict]) -> str:
-    """Format input for LoRA-A' training (Q + passages)."""
-    raise NotImplementedError("TODO: Implement in M5")
-
-
-def format_lora_a_prime_target(answer: str) -> str:
-    """Format target for LoRA-A' training (same as LoRA-A)."""
-    raise NotImplementedError("TODO: Implement in M5")
-
-
-def format_lora_b_input(question: str, passages: list[dict]) -> str:
-    """Format input for LoRA-B training (Q + passages)."""
-    raise NotImplementedError("TODO: Implement in M5")
-
-
-def format_lora_b_target(reasoning: str, answer: str) -> str:
-    """Format target for LoRA-B training (reasoned answer)."""
-    raise NotImplementedError("TODO: Implement in M5")
-
-
-def format_inference_input(
-    question: str,
-    passages: list[dict] | None = None,
-    retrieval_condition: str = "none",
-) -> str:
-    """Format input for inference.
-
-    Args:
-        question: Question text
-        passages: Retrieved passages (None for "none" condition)
-        retrieval_condition: One of "none", "strong", "oracle"
-
-    Returns:
-        Formatted prompt string
+        Passage [P1]: ...
+        Passage [P2]: ...
+        ...
     """
-    raise NotImplementedError("TODO: Implement in M5")
+    sorted_passages = sorted(passages, key=lambda p: p["position"])
+    lines = []
+    for p in sorted_passages:
+        lines.append(f"Passage [P{p['position']}]: {p['text']}")
+    return "\n\n".join(lines)
+
+
+def _format_answer_label(example: dict) -> str:
+    """Extract the canonical answer label from an example.
+
+    yesno questions: generated_answer lowercased (yes/no/maybe/insufficient evidence)
+    factoid questions: generated_answer with case preserved
+    """
+    generated = example["generated_answer"]
+    if example["question_type"] == "yesno":
+        return generated.lower()
+    return generated
+
+
+def format_lora_a(example: dict) -> tuple[str, str]:
+    """LoRA-A: question only → answer label.
+
+    Returns (prompt, target).
+    """
+    question = example["question"]
+    answer = _format_answer_label(example)
+
+    prompt = (
+        f"{BOS}"
+        f"{SYS_START}{INSTRUCTION_LORA_A}{SYS_END}"
+        f"{USER_START}Question: {question}{USER_END}"
+        f"{ASSISTANT_START}"
+    )
+    target = f"Answer: {answer}{ASSISTANT_END}"
+    return prompt, target
+
+
+def format_lora_a_prime(example: dict) -> tuple[str, str]:
+    """LoRA-A': question + 5 passages → answer label (no reasoning).
+
+    Returns (prompt, target).
+    """
+    question = example["question"]
+    passages_block = _format_passages(example["passages"])
+    answer = _format_answer_label(example)
+
+    prompt = (
+        f"{BOS}"
+        f"{SYS_START}{INSTRUCTION_LORA_A_PRIME}{SYS_END}"
+        f"{USER_START}Question: {question}\n\n{passages_block}{USER_END}"
+        f"{ASSISTANT_START}"
+    )
+    target = f"Answer: {answer}{ASSISTANT_END}"
+    return prompt, target
+
+
+def format_lora_b(example: dict) -> tuple[str, str]:
+    """LoRA-B: question + 5 passages → reasoning with citations + answer label.
+
+    Returns (prompt, target).
+    """
+    question = example["question"]
+    passages_block = _format_passages(example["passages"])
+    reasoning = _normalize_citations(example["generated_reasoning"])
+    answer = _format_answer_label(example)
+
+    prompt = (
+        f"{BOS}"
+        f"{SYS_START}{INSTRUCTION_LORA_B}{SYS_END}"
+        f"{USER_START}Question: {question}\n\n{passages_block}{USER_END}"
+        f"{ASSISTANT_START}"
+    )
+    target = f"{reasoning}\n\nAnswer: {answer}{ASSISTANT_END}"
+    return prompt, target

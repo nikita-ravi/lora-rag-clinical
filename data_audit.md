@@ -231,3 +231,22 @@ Generated: 2026-04-08
 
 - `data/synthetic/lora_b_train_raw.jsonl` — 2000 raw generations with full metadata
 - `data/synthetic/lora_b_train.jsonl` — 1877 filtered examples for training
+
+## M5: Materialized Training Sets
+
+Generated: 2026-04-14
+
+### Files
+
+- `data/training/lora_a_train.jsonl` — 1877 examples, question-only prompt → answer label
+- `data/training/lora_a_prime_train.jsonl` — 1877 examples, question + 5 passages → answer label
+- `data/training/lora_b_train.jsonl` — 1877 examples, question + 5 passages → reasoning + answer
+
+### Key Properties
+
+- All three files have identical example IDs in identical order
+- LoRA-A' and LoRA-B prompts are byte-identical (verified by test_lora_a_prime_and_b_prompts_byte_identical)
+- LoRA-B targets use normalized [P1]-[P5] citation format (bare P references converted)
+- Answer labels use generated_answer (lowercased for yesno, preserved case for factoid) across all three sets
+- Prompt format: Llama 3.1 Instruct chat template (system/user/assistant headers)
+- "Insufficient evidence" preserved as valid 4th output label (19.9% of examples)
