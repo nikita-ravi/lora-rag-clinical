@@ -207,6 +207,9 @@ If strong retrieval is too weak or too strong, we adjust the pipeline before pro
 ---
 
 ### M6: Training Scripts
+
+**Status:** ✅ Complete (2026-04-18). All three training scripts implemented as thin wrappers around shared train_recipe() in common.py. CPU smoke tests pass on all three recipes (loss ~10.83, confirming label masking is correct). Kaggle notebooks created with 100-step validation cells. Truncation bug caught and fixed during smoke testing (max_seq_length increased from 512 to 1024 for smoke test path).
+
 **Estimated hours:** 12–15
 **Dependencies:** M4, M5
 **Deliverables:**
@@ -471,11 +474,11 @@ These are uncertainties I cannot resolve through planning—they require empiric
 - [x] M3 retrieval layer complete (2026-04-07) — Hit@5=0.880 in band, BioASQ pivot
 - [x] M4 synthetic data generation (2026-04-08) — 1877 examples, 93.8% pass rate, $2.50 cost
 - [x] M5 prompts & distractors (2026-04-14) — 1877 examples materialized, 3 training sets, clean ablation verified
-- [ ] M6 training scripts
+- [x] M6 training scripts (2026-04-18) — 3 recipes, CPU smoke tests pass, Kaggle notebooks ready
 - [ ] M7 inference & eval
 - [ ] M8 annotation tool
 - [ ] M9 analysis & paper
 
 ---
 
-*Last updated: 2026-04-14*
+*Last updated: 2026-04-18*

@@ -250,3 +250,34 @@ Generated: 2026-04-14
 - Answer labels use generated_answer (lowercased for yesno, preserved case for factoid) across all three sets
 - Prompt format: Llama 3.1 Instruct chat template (system/user/assistant headers)
 - "Insufficient evidence" preserved as valid 4th output label (19.9% of examples)
+
+## M6: Training Scripts
+
+Completed: 2026-04-18
+
+### Smoke Test Results
+
+| Recipe | Steps | Loss | Time | Status |
+|--------|-------|------|------|--------|
+| LoRA-A | 2 | 10.8344 | 7.2s | Pass |
+| LoRA-A' | 2 | 10.8308 | 4.9s | Pass |
+| LoRA-B | 2 | 10.8281 | 3.8s | Pass |
+
+Smoke test model: sshleifer/tiny-gpt2 (CPU, no quantization)
+Loss ~10.83 confirms label masking is correct (random model on random tokens).
+
+### Bug Found and Fixed
+
+Initial LoRA-A' smoke test showed loss=0.0 because max_seq_length=512 truncated the entire target (prompts are 550-860 tokens with passages). Fixed by increasing smoke test max_seq_length to 1024.
+
+### Files
+
+- `src/training/common.py` — shared training infrastructure (458 lines)
+- `src/training/lora_a.py`, `lora_a_prime.py`, `lora_b.py` — thin recipe wrappers (~65 lines each)
+- `configs/lora_a.yaml`, `lora_a_prime.yaml`, `lora_b.yaml` — hyperparameter configs
+- `notebooks/02_lora_a_kaggle.ipynb`, `02b_lora_a_prime_kaggle.ipynb`, `03_lora_b_kaggle.ipynb`
+
+### Next: Kaggle Execution
+
+100-step validation run on each recipe before committing to full 1-epoch training.
+9 total runs (3 recipes × 3 seeds) on Kaggle 2×T4.
